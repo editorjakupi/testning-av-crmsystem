@@ -1,0 +1,91 @@
+# Denna workflow kör enhetstester och API-tester för CRM-systemet
+name: CRM System Tests
+
+# Trigger: Workflowen körs när du pushar till eller gör en PR till "main"
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  # Enhetstester
+  unit_tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      # Steg 1: Checka ut koden från ditt repository
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      # Steg 2: Installera rätt version av .NET SDK
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: "9.0"
+
+      # Steg 3: Återställ beroenden
+      - name: Restore dependencies
+        run: dotnet restore
+
+      # Steg 4: Bygg projektet (utan att återställa igen)
+      - name: Build solution
+        run: dotnet build --configuration Release --no-restore
+
+      # Steg 5: Kör unit testing med högre detaljeringsgrad
+      - name: Run unit tests
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+  # API-tester
+  api_tests:
+    name: API Tests
+    runs-on: ubuntu-latest
+    steps:
+      # Steg 1: Checka ut koden
+      - name: Check out repository code
+        uses: actions/checkout@v3
+
+      # Steg 2: Installera Node.js
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Steg 3: Installera .NET
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      # Steg 4: Installera Newman
+      - name: Install Newman
+        run: npm install -g newman
+
+      # Steg 5: Installera projektberoenden
+      - name: Install project dependencies
+        run: npm install
+
+      # Steg 6: Installera .NET-beroenden
+      - name: Install dotnet project dependencies
+        run: dotnet restore
+
+      # Steg 7: Bygg projektet
+      - name: Build
+        run: dotnet build
+
+      # Steg 8: Starta servern i bakgrunden
+      - name: Start Server
+        run: cd server && nohup dotnet run &
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ASPNETCORE_URLS: http://localhost:3000
+
+      # Steg 9: Vänta på att servern ska starta
+      - name: Wait for server to start
+        run: sleep 10
+
+      # Steg 10: Kör API-tester
+      - name: Run API-Tests
+        run: newman run ./api-test/collection.json -e ./api-test/environment.json

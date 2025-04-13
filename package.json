@@ -1,0 +1,25 @@
+{
+  "name": "testning-av-crmsystem",
+  "version": "1.0.0",
+  "description": "- In the terminal, open client and run \"npm install\". \r - In the terminal, open server and run \"dotnet restore\".",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "api-test": "newman run api-test/collection.json -e api-test/environment.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/editorjakupi/testning-av-crmsystem.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/editorjakupi/testning-av-crmsystem/issues"
+  },
+  "homepage": "https://github.com/editorjakupi/testning-av-crmsystem#readme",
+  "devDependencies": {
+    "newman": "^5.3.2"
+  }
+}
