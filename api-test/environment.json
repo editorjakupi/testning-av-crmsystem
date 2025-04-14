@@ -70,7 +70,7 @@
     },
     {
       "key": "issueId",
-      "value": "1",
+      "value": "00000000-0000-0000-0000-000000000001",
       "type": "default",
       "enabled": true
     },
