@@ -3,6 +3,7 @@ using server;
 using server.api;
 using server.Config;
 using server.Services;
+using Microsoft.AspNetCore.StaticFiles;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -30,6 +31,13 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 
 var app = builder.Build();
 
+// Configure static files
+app.UseDefaultFiles(new DefaultFilesOptions
+{
+    DefaultFileNames = new List<string> { "index.html" }
+});
+app.UseStaticFiles();
+
 app.UseSession();
 
 String url = "/api";
@@ -40,5 +48,8 @@ new Users(app, db, url);
 new Issues(app, db, url);
 new Forms(app, db, url);
 new Companies(app, db, url);
+
+// Handle SPA routing
+app.MapFallbackToFile("index.html");
 
 await app.RunAsync();
