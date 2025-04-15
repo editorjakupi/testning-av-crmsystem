@@ -59,7 +59,7 @@ jobs:
 
       # Steg 6: Kör unit testing med högre detaljeringsgrad
       - name: Run unit tests
-        run: dotnet test --configuration Release --no-build --verbosity normal
+        run: dotnet test CRMsystem.UnitTests/CRMsystem.UnitTests.csproj --configuration Release --no-build --verbosity normal
         env:
           ASPNETCORE_ENVIRONMENT: Testing
 
@@ -170,9 +170,13 @@ jobs:
       - name: Build/Restore Playwright Project
         run: cd ui-tests && dotnet build
 
-      # Steg 6: Installera Playwright browsers
-      - name: Install Playwright browsers
-        run: cd ui-tests && pwsh bin/Debug/net8.0/playwright.ps1 install --with-deps
+      # Steg 6: Installera Playwright drivers
+      - name: Install Playwright drivers
+        run: |
+          cd ui-tests
+          dotnet tool install --global Microsoft.Playwright.CLI
+          playwright install chromium
+          playwright install-deps chromium
 
       # Steg 7: Starta servern i bakgrunden
       - name: Start Server
