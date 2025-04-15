@@ -197,11 +197,29 @@ jobs:
           password: ${{ secrets.PASSWORD }}
           port: ${{ secrets.PORT }}
           script: |
+            # Installera nödvändiga verktyg
+            curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+            sudo apt-get install -y nodejs
+            sudo npm install -g pm2
+
+            # Gå till projektmappen
             cd /srv/www/halmstad/editor
-            git pull
+
+            # Om repot inte finns, klona det
+            if [ ! -d ".git" ]; then
+              rm -rf * .*
+              git clone https://github.com/editorjakupi/testning-av-crmsystem.git .
+            else
+              git fetch
+              git reset --hard origin/main
+            fi
+
+            # Bygg och starta client
             cd client
             npm ci
             npm run build
+
+            # Bygg och starta server
             cd ../server
             dotnet restore
             pm2 stop crm-system || true
