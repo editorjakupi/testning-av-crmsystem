@@ -134,7 +134,7 @@ jobs:
   # GUI-tester
   gui_tests:
     name: GUI Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: api_tests # Kör endast om api testerna går igenom
     steps:
       # Steg 1: Checka ut koden
