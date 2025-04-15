@@ -15,7 +15,8 @@ builder.Services.AddSession(options =>
     options.Cookie.IsEssential = true;
 });
 
-Database database = new Database();
+// Skapa Database-instansen med IConfiguration
+Database database = new Database(builder.Configuration);
 NpgsqlDataSource db = database.Connection();
 
 var emailSettings = builder.Configuration.GetSection("Email").Get<EmailSettings>();
