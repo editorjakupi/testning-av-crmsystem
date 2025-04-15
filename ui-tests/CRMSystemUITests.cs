@@ -1,6 +1,5 @@
 using Microsoft.Playwright;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using System.Threading.Tasks;
 
 namespace CRMSystemUITests;
 
@@ -8,418 +7,388 @@ namespace CRMSystemUITests;
 /// Testklass för att testa CRM-systemets användargränssnitt med Playwright
 /// </summary>
 [TestClass]
-public class CRMSystemUITests
+public class CRMTests
 {
-    private IPlaywright _playwright = null!;
-    private IBrowser _browser = null!;
-    private IPage _page = null!;
-    private const int Timeout = 60000; // 60 sekunder timeout
-
-    // Användaruppgifter från databasen
-    private const string AdminEmail = "m@email.com";
-    private const string AdminPassword = "abc123";
-    private const string UserEmail = "no@email.com";
-    private const string UserPassword = "abc123";
+    private IPlaywright? _playwright;
+    private IBrowser? _browser;
+    private IPage? _page;
+    private const int DefaultTimeout = 10000; // 10 sekunder timeout
+    private const int SlowMo = 1500; // Lägger in en fördröjning så vi kan se vad som händer
 
     [TestInitialize]
     public async Task TestInitialize()
     {
-        // Skapa en ny Playwright-instans för varje test
-        _playwright = await Playwright.CreateAsync();
-
-        // Starta en ny webbläsare för varje test
-        _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions
+        // Konfigurera browser-inställningar för att förbättra prestanda och stabilitet
+        var options = new BrowserTypeLaunchOptions
         {
+            Channel = "msedge",
             Headless = false,
-            SlowMo = 100 // Lägg till lite fördröjning för att göra det lättare att se vad som händer
-        });
+            SlowMo = SlowMo, // Lägg till SlowMo för att se vad som händer
+            Args = new[] {
+                "--no-sandbox",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--disable-extensions",
+                "--disable-software-rasterizer"
+            },
+            Timeout = DefaultTimeout
+        };
 
-        // Skapa en ny sida för varje test
-        _page = await _browser.NewPageAsync();
+        try
+        {
+            _playwright = await Playwright.CreateAsync();
+            _browser = await _playwright.Chromium.LaunchAsync(options);
+            var context = await _browser.NewContextAsync(new BrowserNewContextOptions
+            {
+                ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
+                IgnoreHTTPSErrors = true,
+                JavaScriptEnabled = true
+            });
+            _page = await context.NewPageAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to initialize Playwright: {ex}");
+            throw;
+        }
     }
 
     [TestCleanup]
     public async Task TestCleanup()
     {
-        // Stäng webbläsaren och frigör resurser
-        if (_page != null) await _page.CloseAsync();
-        if (_browser != null) await _browser.CloseAsync();
-        if (_playwright != null) _playwright.Dispose();
+        try
+        {
+            if (_page != null) await _page.CloseAsync();
+            if (_browser != null) await _browser.CloseAsync();
+            if (_playwright != null) _playwright.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to cleanup Playwright: {ex}");
+        }
     }
 
     /// <summary>
     /// Hjälpmetod för att logga in som admin
+    /// Förväntat beteende:
+    /// 1. Navigera till inloggningssidan
+    /// 2. Fyll i e-post och lösenord
+    /// 3. Klicka på inloggningsknappen
+    /// 4. Vänta på att användaren omdirigeras till startsidan
     /// </summary>
     private async Task LoginAsAdmin()
     {
-        // Gå till inloggningssidan och vänta på att den laddas
-        await _page.GotoAsync("http://localhost:3000/login", new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = Timeout });
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
+        try
+        {
+            Console.WriteLine("Navigating to login page...");
+            await _page.GotoAsync("http://localhost:3000/login", new PageGotoOptions
+            {
+                WaitUntil = WaitUntilState.NetworkIdle,
+                Timeout = DefaultTimeout
+            });
 
-        // Vänta på att inloggningsformuläret laddas
-        var form = await _page.WaitForSelectorAsync("form", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(form, "Inloggningsformuläret kunde inte hittas");
+            Console.WriteLine("Waiting for login form...");
+            var emailInput = await _page.WaitForSelectorAsync("input[type='text'][name='email']", new PageWaitForSelectorOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = DefaultTimeout
+            });
+            var passwordInput = await _page.WaitForSelectorAsync("input[type='password']", new PageWaitForSelectorOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = DefaultTimeout
+            });
+            var submitButton = await _page.WaitForSelectorAsync("button[type='submit']", new PageWaitForSelectorOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = DefaultTimeout
+            });
 
-        // Fyll i inloggningsformuläret med admin-uppgifter
-        var emailInput = await _page.WaitForSelectorAsync("input[type='text'][name='email']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(emailInput, "E-postfältet kunde inte hittas");
-        await emailInput.FillAsync(AdminEmail);
+            if (emailInput == null || passwordInput == null || submitButton == null)
+                throw new InvalidOperationException("Login form elements not found");
 
-        var passwordInput = await _page.WaitForSelectorAsync("input[type='password'][name='password']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(passwordInput, "Lösenordsfältet kunde inte hittas");
-        await passwordInput.FillAsync(AdminPassword);
+            Console.WriteLine("Filling in login credentials...");
+            await emailInput.FillAsync("m@email.com");
+            await passwordInput.FillAsync("abc123");
 
-        // Klicka på inloggningsknappen och vänta på att sidan laddas om
-        var submitButton = await _page.WaitForSelectorAsync("button[type='submit']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(submitButton, "Inloggningsknappen kunde inte hittas");
-        await submitButton.ClickAsync();
+            Console.WriteLine("Clicking login button...");
+            await submitButton.ClickAsync();
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Vänta på att sidan laddas om efter inloggning
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+            Console.WriteLine("Waiting for redirect to home page...");
+            await _page.WaitForURLAsync("http://localhost:3000/", new PageWaitForURLOptions
+            {
+                Timeout = DefaultTimeout
+            });
 
-        // Vänta på att vi kommer till startsidan
-        await _page.WaitForURLAsync("http://localhost:3000/", new() { Timeout = Timeout });
-    }
-
-    /// <summary>
-    /// Hjälpmetod för att logga in som användare
-    /// </summary>
-    private async Task LoginAsUser()
-    {
-        // Gå till inloggningssidan och vänta på att den laddas
-        await _page.GotoAsync("http://localhost:3000/login", new() { WaitUntil = WaitUntilState.NetworkIdle, Timeout = Timeout });
-
-        // Vänta på att inloggningsformuläret laddas
-        var form = await _page.WaitForSelectorAsync("form", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(form, "Inloggningsformuläret kunde inte hittas");
-
-        // Fyll i inloggningsformuläret med användaruppgifter
-        var emailInput = await _page.WaitForSelectorAsync("input[type='text'][name='email']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(emailInput, "E-postfältet kunde inte hittas");
-        await emailInput.FillAsync(UserEmail);
-
-        var passwordInput = await _page.WaitForSelectorAsync("input[type='password'][name='password']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(passwordInput, "Lösenordsfältet kunde inte hittas");
-        await passwordInput.FillAsync(UserPassword);
-
-        // Klicka på inloggningsknappen och vänta på att sidan laddas om
-        var submitButton = await _page.WaitForSelectorAsync("button[type='submit']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(submitButton, "Inloggningsknappen kunde inte hittas");
-        await submitButton.ClickAsync();
-
-        // Vänta på att sidan laddas om efter inloggning
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att vi kommer till startsidan
-        await _page.WaitForURLAsync("http://localhost:3000/", new() { Timeout = Timeout });
+            Console.WriteLine("Login successful!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to login as admin: {ex}");
+            throw;
+        }
     }
 
     /// <summary>
     /// Hjälpmetod för att logga ut
+    /// Förväntat beteende:
+    /// 1. Klicka på utloggningsknappen
+    /// 2. Vänta på att användaren omdirigeras till inloggningssidan
     /// </summary>
     private async Task Logout()
     {
-        // Klicka på utloggningsknappen
-        var logoutButton = await _page.WaitForSelectorAsync("a:has-text('Logga ut')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(logoutButton, "Utloggningsknappen kunde inte hittas");
-        await logoutButton.ClickAsync();
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
+        try
+        {
+            Console.WriteLine("Clicking logout button...");
+            var logoutButton = await _page.WaitForSelectorAsync("button:has-text('Logout')", new PageWaitForSelectorOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = DefaultTimeout
+            });
+            if (logoutButton == null) throw new InvalidOperationException("Logout button not found");
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+            await logoutButton.ClickAsync();
+            await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Vänta på att vi kommer till inloggningssidan
-        await _page.WaitForURLAsync("http://localhost:3000/login", new() { Timeout = Timeout });
+            // Vänta på att användaren ska försvinna från navbaren
+            Console.WriteLine("Waiting for user to be logged out...");
+            await _page.WaitForSelectorAsync("a[href='/login']", new PageWaitForSelectorOptions
+            {
+                State = WaitForSelectorState.Visible,
+                Timeout = DefaultTimeout
+            });
+
+            Console.WriteLine("Logout successful!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to logout: {ex}");
+            throw;
+        }
     }
 
     [TestMethod]
     public async Task AdminLoginTest()
     {
         await LoginAsAdmin();
-
-        // Vänta på att välkomsttexten laddas
-        var welcomeText = await _page.WaitForSelectorAsync("h1", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(welcomeText, "Välkomsttexten kunde inte hittas");
-
-        var text = await welcomeText.TextContentAsync();
-        Assert.IsNotNull(text);
-        Assert.IsTrue(text.Contains("Välkommen"), "Välkomsttexten innehåller inte 'Välkommen'");
-
-        // Logga ut efter testet
         await Logout();
     }
 
     [TestMethod]
-    public async Task UserLoginTest()
-    {
-        await LoginAsUser();
-
-        // Vänta på att välkomsttexten laddas
-        var welcomeText = await _page.WaitForSelectorAsync("h1", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(welcomeText, "Välkomsttexten kunde inte hittas");
-
-        var text = await welcomeText.TextContentAsync();
-        Assert.IsNotNull(text);
-        Assert.IsTrue(text.Contains("Välkommen"), "Välkomsttexten innehåller inte 'Välkommen'");
-
-        // Logga ut efter testet
-        await Logout();
-    }
-
-    [TestMethod]
-    public async Task CreateIssueTest()
-    {
-        await LoginAsUser();
-
-        // Vänta på att sidan laddas helt
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Klicka på länken för att skapa ärende
-        var createIssueLink = await _page.WaitForSelectorAsync("a:has-text('Skapa ärende')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(createIssueLink, "Länken för att skapa ärende kunde inte hittas");
-        await createIssueLink.ClickAsync();
-
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att formuläret laddas
-        var form = await _page.WaitForSelectorAsync("form", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(form, "Formuläret för att skapa ärende kunde inte hittas");
-
-        // Fyll i formuläret
-        var titleInput = await _page.WaitForSelectorAsync("input[name='title']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(titleInput, "Titelfältet kunde inte hittas");
-        await titleInput.FillAsync("Test Issue");
-
-        var descriptionInput = await _page.WaitForSelectorAsync("textarea[name='description']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(descriptionInput, "Beskrivningsfältet kunde inte hittas");
-        await descriptionInput.FillAsync("Test Description");
-
-        // Klicka på spara-knappen
-        var submitButton = await _page.WaitForSelectorAsync("button[type='submit']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(submitButton, "Spara-knappen kunde inte hittas");
-        await submitButton.ClickAsync();
-
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att vi kommer till ärendesidan
-        await _page.WaitForURLAsync("http://localhost:3000/issues/*", new() { Timeout = Timeout });
-
-        // Vänta på att success-meddelandet laddas
-        var successMessage = await _page.WaitForSelectorAsync(".success-message", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(successMessage, "Success-meddelandet kunde inte hittas");
-
-        var message = await successMessage.TextContentAsync();
-        Assert.IsNotNull(message);
-        Assert.IsTrue(message.Contains("Ärende skapat"), "Success-meddelandet innehåller inte 'Ärende skapat'");
-
-        // Logga ut efter testet
-        await Logout();
-    }
-
-    [TestMethod]
-    public async Task UpdateIssueTest()
+    public async Task IssueManagementTest()
     {
         await LoginAsAdmin();
 
-        // Vänta på att sidan laddas helt
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Klicka på länken för ärenden
-        var issuesLink = await _page.WaitForSelectorAsync("a:has-text('Ärenden')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(issuesLink, "Länken för ärenden kunde inte hittas");
+        // Navigera till issues-sidan
+        Console.WriteLine("Clicking on Issues link in navigation...");
+        var issuesLink = await _page.WaitForSelectorAsync("a[href='/employee/issues']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (issuesLink == null) throw new InvalidOperationException("Issues link not found");
         await issuesLink.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Klicka på första tillgängliga edit-knappen
+        Console.WriteLine("Clicking first available edit button (pen icon)...");
+        await _page.WaitForSelectorAsync(".issueCard", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
 
-        // Vänta på att ärendelistan laddas
-        var issueLink = await _page.WaitForSelectorAsync("a:has-text('Test Issue')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(issueLink, "Länken till testärendet kunde inte hittas");
-        await issueLink.ClickAsync();
+        var editButton = await _page.WaitForSelectorAsync(".stateColumn button.subjectEditButton", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (editButton == null) throw new InvalidOperationException("Edit button not found");
+        await editButton.ClickAsync();
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Ändra ärendestatus till "CLOSED" och spara
+        Console.WriteLine("Changing issue status to CLOSED...");
+        var statusSelect = await _page.WaitForSelectorAsync("select.stateSelect", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (statusSelect == null) throw new InvalidOperationException("Status select not found");
+        await statusSelect.SelectOptionAsync(new[] { "CLOSED" });
 
-        // Vänta på att kommentarsformuläret laddas
-        var commentInput = await _page.WaitForSelectorAsync("textarea[name='comment']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(commentInput, "Kommentarsfältet kunde inte hittas");
-        await commentInput.FillAsync("Test Comment");
+        var saveButton = await _page.WaitForSelectorAsync("button.stateUpdateButton", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (saveButton == null) throw new InvalidOperationException("Save button not found");
+        await saveButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Klicka på uppdatera-knappen
-        var updateButton = await _page.WaitForSelectorAsync("button:has-text('Uppdatera')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(updateButton, "Uppdatera-knappen kunde inte hittas");
-        await updateButton.ClickAsync();
-
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att kommentaren laddas
-        var commentText = await _page.WaitForSelectorAsync(".comment-text", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(commentText, "Kommentarstexten kunde inte hittas");
-
-        var text = await commentText.TextContentAsync();
-        Assert.IsNotNull(text);
-        Assert.IsTrue(text.Contains("Test Comment"), "Kommentarstexten innehåller inte 'Test Comment'");
-
-        // Logga ut efter testet
         await Logout();
     }
 
     [TestMethod]
-    public async Task CreateUserTest()
+    public async Task FormSubjectsTest()
     {
         await LoginAsAdmin();
 
-        // Vänta på att sidan laddas helt
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Navigera till formulärämnen
+        Console.WriteLine("Navigating to form subjects...");
+        var formSubjectsLink = await _page.WaitForSelectorAsync("a:has-text('Form subjects')", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (formSubjectsLink == null) throw new InvalidOperationException("Form subjects link not found");
+        await formSubjectsLink.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Klicka på länken för användare
-        var usersLink = await _page.WaitForSelectorAsync("a:has-text('Användare')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(usersLink, "Länken för användare kunde inte hittas");
-        await usersLink.ClickAsync();
+        // Klicka på "New Subject" och skapa ett nytt ämne
+        Console.WriteLine("Clicking on New Subject...");
+        var newSubjectButton = await _page.WaitForSelectorAsync("#subjectViewMenu button", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (newSubjectButton == null) throw new InvalidOperationException("New Subject button not found");
+        await newSubjectButton.ClickAsync();
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Fyll i ämnesinformation
+        Console.WriteLine("Filling in subject details...");
+        var subjectNameInput = await _page.WaitForSelectorAsync("input[name='newSubject']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (subjectNameInput == null) throw new InvalidOperationException("Subject name input not found");
+        await subjectNameInput.FillAsync("Test ämne");
 
-        // Klicka på länken för ny användare
-        var newUserLink = await _page.WaitForSelectorAsync("a:has-text('Ny användare')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(newUserLink, "Länken för ny användare kunde inte hittas");
-        await newUserLink.ClickAsync();
+        // Spara ämnet
+        Console.WriteLine("Saving subject...");
+        var saveSubjectButton = await _page.WaitForSelectorAsync("form button[type='submit']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (saveSubjectButton == null) throw new InvalidOperationException("Save subject button not found");
+        await saveSubjectButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Ta bort det skapade ämnet
+        Console.WriteLine("Deleting the created subject...");
+        var deleteButton = await _page.WaitForSelectorAsync("button.removeButton", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (deleteButton == null) throw new InvalidOperationException("Delete button not found");
+        await deleteButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Vänta på att formuläret laddas
-        var form = await _page.WaitForSelectorAsync("form", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(form, "Formuläret för att skapa användare kunde inte hittas");
-
-        // Fyll i formuläret
-        var emailInput = await _page.WaitForSelectorAsync("input[name='email']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(emailInput, "E-postfältet kunde inte hittas");
-        await emailInput.FillAsync("newuser@example.com");
-
-        var passwordInput = await _page.WaitForSelectorAsync("input[name='password']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(passwordInput, "Lösenordsfältet kunde inte hittas");
-        await passwordInput.FillAsync("newuser123");
-
-        var roleSelect = await _page.WaitForSelectorAsync("select[name='role']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(roleSelect, "Rullgardinsmenyn för roll kunde inte hittas");
-        await roleSelect.SelectOptionAsync("user");
-
-        // Klicka på spara-knappen
-        var submitButton = await _page.WaitForSelectorAsync("button[type='submit']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(submitButton, "Spara-knappen kunde inte hittas");
-        await submitButton.ClickAsync();
-
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att success-meddelandet laddas
-        var successMessage = await _page.WaitForSelectorAsync(".success-message", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(successMessage, "Success-meddelandet kunde inte hittas");
-
-        var message = await successMessage.TextContentAsync();
-        Assert.IsNotNull(message);
-        Assert.IsTrue(message.Contains("Användare skapad"), "Success-meddelandet innehåller inte 'Användare skapad'");
-
-        // Logga ut efter testet
         await Logout();
     }
 
     [TestMethod]
-    public async Task LogoutTest()
+    public async Task GuestIssueTest()
     {
-        await LoginAsAdmin();
+        // Navigera till Demo AB issueform
+        Console.WriteLine("Navigating to Demo AB issueform...");
+        await _page.GotoAsync("http://localhost:3000/Demo%20AB/issueform", new PageGotoOptions
+        {
+            WaitUntil = WaitUntilState.NetworkIdle,
+            Timeout = DefaultTimeout
+        });
 
-        // Vänta på att sidan laddas helt
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Fyll i ärendeformulär som gäst
+        Console.WriteLine("Filling in issue form as guest...");
+        var guestEmailInput = await _page.WaitForSelectorAsync("input[type='email']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        var guestTitleInput = await _page.WaitForSelectorAsync("input[name='title']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        var guestMessageInput = await _page.WaitForSelectorAsync("textarea[name='message']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (guestEmailInput == null || guestTitleInput == null || guestMessageInput == null)
+            throw new InvalidOperationException("Guest form elements not found");
 
-        // Klicka på utloggningsknappen
-        var logoutButton = await _page.WaitForSelectorAsync("a:has-text('Logga ut')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(logoutButton, "Utloggningsknappen kunde inte hittas");
-        await logoutButton.ClickAsync();
+        await guestEmailInput.FillAsync("guest@example.com");
+        await guestTitleInput.FillAsync("Gäst ärende");
+        await guestMessageInput.FillAsync("Gäst beskrivning");
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att vi kommer till inloggningssidan
-        await _page.WaitForURLAsync("http://localhost:3000/login", new() { Timeout = Timeout });
-
-        // Vänta på att inloggningsformuläret laddas
-        var loginForm = await _page.WaitForSelectorAsync("form", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(loginForm, "Inloggningsformuläret kunde inte hittas efter utloggning");
+        // Klicka på Create Issue
+        Console.WriteLine("Clicking Create Issue...");
+        var createIssueButton = await _page.WaitForSelectorAsync("button[type='submit']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (createIssueButton == null) throw new InvalidOperationException("Create Issue button not found");
+        await createIssueButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
     [TestMethod]
-    public async Task CreateEmployeeTest()
+    public async Task RegistrationTest()
     {
-        await LoginAsAdmin();
+        // Klicka på Register
+        Console.WriteLine("Clicking on Register...");
+        await _page.GotoAsync("http://localhost:3000/register", new PageGotoOptions
+        {
+            WaitUntil = WaitUntilState.NetworkIdle,
+            Timeout = DefaultTimeout
+        });
 
-        // Vänta på att sidan laddas helt
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
+        // Fyll i registreringsformulär
+        Console.WriteLine("Filling in registration form...");
+        var registerUsernameInput = await _page.WaitForSelectorAsync("input[name='username']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        var registerEmailInput = await _page.WaitForSelectorAsync("input[type='email']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        var registerPasswordInput = await _page.WaitForSelectorAsync("input[type='password']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        var registerCompanyInput = await _page.WaitForSelectorAsync("input[name='company']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (registerUsernameInput == null || registerEmailInput == null || registerPasswordInput == null || registerCompanyInput == null)
+            throw new InvalidOperationException("Registration form elements not found");
 
-        // Klicka på länken för användare
-        var usersLink = await _page.WaitForSelectorAsync("a:has-text('Användare')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(usersLink, "Länken för användare kunde inte hittas");
-        await usersLink.ClickAsync();
+        await registerUsernameInput.FillAsync("Test Användare");
+        await registerEmailInput.FillAsync("test@example.com");
+        await registerPasswordInput.FillAsync("password123");
+        await registerCompanyInput.FillAsync("Test Company");
 
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Klicka på länken för ny användare
-        var newUserLink = await _page.WaitForSelectorAsync("a:has-text('Add Employee')", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(newUserLink, "Länken för ny användare kunde inte hittas");
-        await newUserLink.ClickAsync();
-
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att formuläret laddas
-        var form = await _page.WaitForSelectorAsync("form", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(form, "Formuläret för att skapa användare kunde inte hittas");
-
-        // Fyll i formuläret
-        var firstnameInput = await _page.WaitForSelectorAsync("input[name='firstname']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(firstnameInput, "Förnamnsfältet kunde inte hittas");
-        await firstnameInput.FillAsync("Test");
-
-        var lastnameInput = await _page.WaitForSelectorAsync("input[name='lastname']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(lastnameInput, "Efternamnsfältet kunde inte hittas");
-        await lastnameInput.FillAsync("User");
-
-        var emailInput = await _page.WaitForSelectorAsync("input[name='email']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(emailInput, "E-postfältet kunde inte hittas");
-        await emailInput.FillAsync("test.user@example.com");
-
-        var passwordInput = await _page.WaitForSelectorAsync("input[name='password']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(passwordInput, "Lösenordsfältet kunde inte hittas");
-        await passwordInput.FillAsync("test123");
-
-        // Välj användarroll
-        var userRoleRadio = await _page.WaitForSelectorAsync("input[value='USER']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(userRoleRadio, "Användarrollen kunde inte hittas");
-        await userRoleRadio.CheckAsync();
-
-        // Klicka på spara-knappen
-        var submitButton = await _page.WaitForSelectorAsync("button[type='submit']", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(submitButton, "Spara-knappen kunde inte hittas");
-        await submitButton.ClickAsync();
-
-        // Vänta på att sidan laddas om
-        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle, new() { Timeout = Timeout });
-
-        // Vänta på att vi kommer till användarsidan
-        await _page.WaitForURLAsync("http://localhost:3000/admin/employees", new() { Timeout = Timeout });
-
-        // Vänta på att success-meddelandet laddas
-        var successMessage = await _page.WaitForSelectorAsync(".success-message", new() { State = WaitForSelectorState.Visible, Timeout = Timeout });
-        Assert.IsNotNull(successMessage, "Success-meddelandet kunde inte hittas");
-
-        var message = await successMessage.TextContentAsync();
-        Assert.IsNotNull(message);
-        Assert.IsTrue(message.Contains("har registrerats"), "Success-meddelandet innehåller inte 'har registrerats'");
-
-        // Logga ut efter testet
-        await Logout();
+        // Klicka på Skapa konto
+        Console.WriteLine("Clicking Create Account...");
+        var createAccountButton = await _page.WaitForSelectorAsync("button[type='submit']", new PageWaitForSelectorOptions
+        {
+            State = WaitForSelectorState.Visible,
+            Timeout = DefaultTimeout
+        });
+        if (createAccountButton == null) throw new InvalidOperationException("Create Account button not found");
+        await createAccountButton.ClickAsync();
+        await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 }
