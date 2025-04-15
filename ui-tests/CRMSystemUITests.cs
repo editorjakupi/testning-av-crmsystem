@@ -1,5 +1,6 @@
 using Microsoft.Playwright;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Threading.Tasks;
 
 namespace CRMSystemUITests;
 
@@ -9,42 +10,27 @@ namespace CRMSystemUITests;
 [TestClass]
 public class CRMTests
 {
-    private IPlaywright? _playwright;
-    private IBrowser? _browser;
-    private IPage? _page;
+    private static IPlaywright _playwright;
+    private static IBrowser _browser;
+    private static IPage _page;
+    private const int Timeout = 30000; // 30 sekunder timeout
     private const int DefaultTimeout = 10000; // 10 sekunder timeout
     private const int SlowMo = 1500; // Lägger in en fördröjning så vi kan se vad som händer
 
-    [TestInitialize]
-    public async Task TestInitialize()
+    [ClassInitialize]
+    public static async Task TestInitialize()
     {
-        // Konfigurera browser-inställningar för att förbättra prestanda och stabilitet
-        var options = new BrowserTypeLaunchOptions
-        {
-            Channel = "msedge",
-            Headless = false,
-            SlowMo = SlowMo, // Lägg till SlowMo för att se vad som händer
-            Args = new[] {
-                "--no-sandbox",
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--disable-extensions",
-                "--disable-software-rasterizer"
-            },
-            Timeout = DefaultTimeout
-        };
-
         try
         {
             _playwright = await Playwright.CreateAsync();
-            _browser = await _playwright.Chromium.LaunchAsync(options);
-            var context = await _browser.NewContextAsync(new BrowserNewContextOptions
+            var options = new BrowserTypeLaunchOptions
             {
-                ViewportSize = new ViewportSize { Width = 1920, Height = 1080 },
-                IgnoreHTTPSErrors = true,
-                JavaScriptEnabled = true
-            });
-            _page = await context.NewPageAsync();
+                Headless = true, // Kör i headless-läge
+                Timeout = Timeout
+            };
+            _browser = await _playwright.Chromium.LaunchAsync(options);
+            _page = await _browser.NewPageAsync();
+            await _page.SetViewportSizeAsync(1920, 1080);
         }
         catch (Exception ex)
         {
@@ -53,19 +39,11 @@ public class CRMTests
         }
     }
 
-    [TestCleanup]
-    public async Task TestCleanup()
+    [ClassCleanup]
+    public static async Task TestCleanup()
     {
-        try
-        {
-            if (_page != null) await _page.CloseAsync();
-            if (_browser != null) await _browser.CloseAsync();
-            if (_playwright != null) _playwright.Dispose();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to cleanup Playwright: {ex}");
-        }
+        if (_browser != null) await _browser.DisposeAsync();
+        if (_playwright != null) _playwright.Dispose();
     }
 
     /// <summary>
