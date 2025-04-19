@@ -34,15 +34,15 @@ Example
   }
 ```
 
-### How to run the test:
+## How to run the test:
 
 
-## Unit testing:
+### Unit testing:
 
 On a bash terminal:
 1. cd project/server
 2. dotnet run
-on another bash terminal
+#### on another bash terminal
 3. cd project/unittestingfolder
 4. dotnet test
 
@@ -51,7 +51,7 @@ on another bash terminal
 On a bash terminal:
 1. cd project/server
 2. dotnet run
-on another bash terminal
+#### on another bash terminal
 3. cd project/apitestingfolder
 4. npm run api-test
 
@@ -60,6 +60,6 @@ on another bash terminal
 On a bash terminal:
 1. cd project/server
 2. dotnet run
-on another bash terminal
+#### on another bash terminal
 3. cd project/uitestingfolder
 4. dotnet test
