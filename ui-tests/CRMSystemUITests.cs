@@ -5,32 +5,54 @@ using System.Threading.Tasks;
 namespace CRMSystemUITests;
 
 /// <summary>
-/// Testklass för att testa CRM-systemets användargränssnitt med Playwright
+/// Testklass för att testa CRM-systemets användargränssnitt med Playwright.
+/// Inkluderar tester för:
+/// - Inloggning och utloggning
+/// - Ärendehantering
+/// - Formulärhantering
+/// - Gästfunktionalitet
+/// - Registrering av nya användare
 /// </summary>
 [TestClass]
 public class CRMTests
 {
-    private static IPlaywright _playwright;
-    private static IBrowser _browser;
-    private static IPage _page;
-    private const int Timeout = 30000; // 30 sekunder timeout
-    private const int DefaultTimeout = 10000; // 10 sekunder timeout
-    private const int SlowMo = 1500; // Lägger in en fördröjning så vi kan se vad som händer
+    // Playwright-komponenter för webbläsarautomatisering
+    private static IPlaywright _playwright;    // Huvudkomponent för Playwright
+    private static IBrowser _browser;          // Webbläsarinstans
+    private static IPage _page;                // Aktuell webbsida
 
+    // Timeout-konstanter för olika operationer
+    private const int Timeout = 30000;         // 30 sekunder för långa operationer
+    private const int DefaultTimeout = 10000;  // 10 sekunder för standardoperationer
+    private const int SlowMo = 1500;           // 1.5 sekunder fördröjning för visualisering
+
+    /// <summary>
+    /// Initialiserar testmiljön före alla tester.
+    /// Sätter upp:
+    /// - Playwright-instans
+    /// - Headless webbläsare
+    /// - Testwebbsida
+    /// - Viewport-storlek
+    /// </summary>
     [ClassInitialize]
     public static async Task TestInitialize()
     {
         try
         {
+            // Skapa Playwright-instans
             _playwright = await Playwright.CreateAsync();
+
+            // Konfigurera webbläsarstart
             var options = new BrowserTypeLaunchOptions
             {
-                Headless = true, // Kör i headless-läge
-                Timeout = Timeout
+                Headless = true,  // Kör i headless-läge för CI/CD
+                Timeout = Timeout // Sätt timeout för långa operationer
             };
+
+            // Starta webbläsare och skapa ny sida
             _browser = await _playwright.Chromium.LaunchAsync(options);
             _page = await _browser.NewPageAsync();
-            await _page.SetViewportSizeAsync(1920, 1080);
+            await _page.SetViewportSizeAsync(1920, 1080); // Sätt viewport-storlek
         }
         catch (Exception ex)
         {
@@ -39,6 +61,12 @@ public class CRMTests
         }
     }
 
+    /// <summary>
+    /// Städar upp efter alla tester.
+    /// Frigör resurser för:
+    /// - Webbläsare
+    /// - Playwright-instans
+    /// </summary>
     [ClassCleanup]
     public static async Task TestCleanup()
     {
@@ -47,18 +75,19 @@ public class CRMTests
     }
 
     /// <summary>
-    /// Hjälpmetod för att logga in som admin
-    /// Förväntat beteende:
-    /// 1. Navigera till inloggningssidan
-    /// 2. Fyll i e-post och lösenord
-    /// 3. Klicka på inloggningsknappen
-    /// 4. Vänta på att användaren omdirigeras till startsidan
+    /// Hjälpmetod för att logga in som administratör.
+    /// Utför följande steg:
+    /// 1. Navigerar till inloggningssidan
+    /// 2. Fyller i administratörsuppgifter
+    /// 3. Klickar på inloggningsknappen
+    /// 4. Väntar på omdirigering till startsidan
     /// </summary>
     private async Task LoginAsAdmin()
     {
         if (_page == null) throw new InvalidOperationException("Page is not initialized");
         try
         {
+            // Navigera till inloggningssidan
             Console.WriteLine("Navigating to login page...");
             await _page.GotoAsync("http://localhost:3000/login", new PageGotoOptions
             {
@@ -66,6 +95,7 @@ public class CRMTests
                 Timeout = DefaultTimeout
             });
 
+            // Vänta på och hitta inloggningsformulärets element
             Console.WriteLine("Waiting for login form...");
             var emailInput = await _page.WaitForSelectorAsync("input[type='text'][name='email']", new PageWaitForSelectorOptions
             {
@@ -83,17 +113,21 @@ public class CRMTests
                 Timeout = DefaultTimeout
             });
 
+            // Verifiera att alla element hittades
             if (emailInput == null || passwordInput == null || submitButton == null)
                 throw new InvalidOperationException("Login form elements not found");
 
+            // Fyll i inloggningsuppgifter
             Console.WriteLine("Filling in login credentials...");
             await emailInput.FillAsync("m@email.com");
             await passwordInput.FillAsync("abc123");
 
+            // Klicka på inloggningsknappen och vänta
             Console.WriteLine("Clicking login button...");
             await submitButton.ClickAsync();
             await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
+            // Vänta på omdirigering till startsidan
             Console.WriteLine("Waiting for redirect to home page...");
             await _page.WaitForURLAsync("http://localhost:3000/", new PageWaitForURLOptions
             {
@@ -110,16 +144,18 @@ public class CRMTests
     }
 
     /// <summary>
-    /// Hjälpmetod för att logga ut
-    /// Förväntat beteende:
-    /// 1. Klicka på utloggningsknappen
-    /// 2. Vänta på att användaren omdirigeras till inloggningssidan
+    /// Hjälpmetod för att logga ut från systemet.
+    /// Utför följande steg:
+    /// 1. Hittar och klickar på utloggningsknappen
+    /// 2. Väntar på att användaren ska loggas ut
+    /// 3. Verifierar omdirigering till inloggningssidan
     /// </summary>
     private async Task Logout()
     {
         if (_page == null) throw new InvalidOperationException("Page is not initialized");
         try
         {
+            // Hitta och klicka på utloggningsknappen
             Console.WriteLine("Clicking logout button...");
             var logoutButton = await _page.WaitForSelectorAsync("button:has-text('Logout')", new PageWaitForSelectorOptions
             {
@@ -148,6 +184,13 @@ public class CRMTests
         }
     }
 
+    /// <summary>
+    /// Testar inloggning och utloggning som administratör.
+    /// Verifierar att:
+    /// - Inloggning fungerar med korrekta uppgifter
+    /// - Omdirigering till startsidan sker
+    /// - Utloggning fungerar korrekt
+    /// </summary>
     [TestMethod]
     public async Task AdminLoginTest()
     {
@@ -155,12 +198,20 @@ public class CRMTests
         await Logout();
     }
 
+    /// <summary>
+    /// Testar ärendehanteringsfunktionaliteten.
+    /// Verifierar att:
+    /// - Ärenden kan visas
+    /// - Ärenden kan redigeras
+    /// - Status kan uppdateras
+    /// - Ändringar sparas korrekt
+    /// </summary>
     [TestMethod]
     public async Task IssueManagementTest()
     {
         await LoginAsAdmin();
 
-        // Navigera till issues-sidan
+        // Navigera till ärendesidan
         Console.WriteLine("Clicking on Issues link in navigation...");
         var issuesLink = await _page.WaitForSelectorAsync("a[href='/employee/issues']", new PageWaitForSelectorOptions
         {
@@ -171,7 +222,7 @@ public class CRMTests
         await issuesLink.ClickAsync();
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Klicka på första tillgängliga edit-knappen
+        // Hitta och klicka på första redigeringsknappen
         Console.WriteLine("Clicking first available edit button (pen icon)...");
         await _page.WaitForSelectorAsync(".issueCard", new PageWaitForSelectorOptions
         {
@@ -187,7 +238,7 @@ public class CRMTests
         if (editButton == null) throw new InvalidOperationException("Edit button not found");
         await editButton.ClickAsync();
 
-        // Ändra ärendestatus till "CLOSED" och spara
+        // Uppdatera ärendestatus
         Console.WriteLine("Changing issue status to CLOSED...");
         var statusSelect = await _page.WaitForSelectorAsync("select.stateSelect", new PageWaitForSelectorOptions
         {
@@ -197,6 +248,7 @@ public class CRMTests
         if (statusSelect == null) throw new InvalidOperationException("Status select not found");
         await statusSelect.SelectOptionAsync(new[] { "CLOSED" });
 
+        // Spara ändringarna
         var saveButton = await _page.WaitForSelectorAsync("button.stateUpdateButton", new PageWaitForSelectorOptions
         {
             State = WaitForSelectorState.Visible,
@@ -209,6 +261,14 @@ public class CRMTests
         await Logout();
     }
 
+    /// <summary>
+    /// Testar hantering av formulärämnen.
+    /// Verifierar att:
+    /// - Nya ämnen kan skapas
+    /// - Ämnen kan redigeras
+    /// - Ämnen kan tas bort
+    /// - Ändringar sparas korrekt
+    /// </summary>
     [TestMethod]
     public async Task FormSubjectsTest()
     {
@@ -225,7 +285,7 @@ public class CRMTests
         await formSubjectsLink.ClickAsync();
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
 
-        // Klicka på "New Subject" och skapa ett nytt ämne
+        // Skapa nytt ämne
         Console.WriteLine("Clicking on New Subject...");
         var newSubjectButton = await _page.WaitForSelectorAsync("#subjectViewMenu button", new PageWaitForSelectorOptions
         {
@@ -270,6 +330,13 @@ public class CRMTests
         await Logout();
     }
 
+    /// <summary>
+    /// Testar gästfunktionalitet för att skapa ärenden.
+    /// Verifierar att:
+    /// - Gäster kan nå ärendeformuläret
+    /// - Formuläret kan fyllas i
+    /// - Ärendet skapas korrekt
+    /// </summary>
     [TestMethod]
     public async Task GuestIssueTest()
     {
@@ -305,7 +372,7 @@ public class CRMTests
         await guestTitleInput.FillAsync("Gäst ärende");
         await guestMessageInput.FillAsync("Gäst beskrivning");
 
-        // Klicka på Create Issue
+        // Skapa ärendet
         Console.WriteLine("Clicking Create Issue...");
         var createIssueButton = await _page.WaitForSelectorAsync("button[type='submit']", new PageWaitForSelectorOptions
         {
@@ -317,10 +384,17 @@ public class CRMTests
         await _page.WaitForLoadStateAsync(LoadState.NetworkIdle);
     }
 
+    /// <summary>
+    /// Testar registrering av nya användare.
+    /// Verifierar att:
+    /// - Registreringsformuläret är tillgängligt
+    /// - Alla fält kan fyllas i
+    /// - Konto skapas korrekt
+    /// </summary>
     [TestMethod]
     public async Task RegistrationTest()
     {
-        // Klicka på Register
+        // Navigera till registreringssidan
         Console.WriteLine("Clicking on Register...");
         await _page.GotoAsync("http://localhost:3000/register", new PageGotoOptions
         {
@@ -358,7 +432,7 @@ public class CRMTests
         await registerPasswordInput.FillAsync("password123");
         await registerCompanyInput.FillAsync("Test Company");
 
-        // Klicka på Skapa konto
+        // Skapa konto
         Console.WriteLine("Clicking Create Account...");
         var createAccountButton = await _page.WaitForSelectorAsync("button[type='submit']", new PageWaitForSelectorOptions
         {

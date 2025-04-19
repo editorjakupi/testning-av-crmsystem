@@ -39,27 +39,27 @@ Example
 
 ### Unit testing:
 
-On a bash terminal:
+#### On a bash terminal:
 1. cd project/server
 2. dotnet run
-#### on another bash terminal
+#### On another bash terminal
 3. cd project/unittestingfolder
 4. dotnet test
 
 
 ## API testing:
-On a bash terminal:
+#### On a bash terminal:
 1. cd project/server
 2. dotnet run
-#### on another bash terminal
+#### On another bash terminal
 3. cd project/apitestingfolder
 4. npm run api-test
 
 
 ## UI testing:
-On a bash terminal:
+#### On a bash terminal:
 1. cd project/server
 2. dotnet run
-#### on another bash terminal
+#### On another bash terminal
 3. cd project/uitestingfolder
 4. dotnet test
