@@ -86,6 +86,7 @@ public class UserTests
         var user = new User(id, username, role, companyId, company);
 
         // Assert - Verifierar att alla värden accepteras utan fel
+        //det dokumenterar att klassen user accepterar ogiltiga värden och det är inte ok
         Assert.Equal(id, user.Id);           // Kontrollerar att negativt ID accepteras
         Assert.Equal(username, user.Username); // Kontrollerar att tomt användarnamn accepteras
         Assert.Equal(companyId, user.CompanyId); // Kontrollerar att negativt företags-ID accepteras

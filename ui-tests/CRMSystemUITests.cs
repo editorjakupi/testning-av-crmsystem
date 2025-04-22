@@ -17,9 +17,9 @@ namespace CRMSystemUITests;
 public class CRMTests
 {
     // Playwright-komponenter för webbläsarautomatisering
-    private static IPlaywright _playwright;    // Huvudkomponent för Playwright
-    private static IBrowser _browser;          // Webbläsarinstans
-    private static IPage _page;                // Aktuell webbsida
+    private static IPlaywright? _playwright;    // Huvudkomponent för Playwright
+    private static IBrowser? _browser;          // Webbläsarinstans
+    private static IPage? _page;                // Aktuell webbsida
 
     // Timeout-konstanter för olika operationer
     private const int Timeout = 30000;         // 30 sekunder för långa operationer
@@ -35,7 +35,7 @@ public class CRMTests
     /// - Viewport-storlek
     /// </summary>
     [ClassInitialize]
-    public static async Task TestInitialize()
+    public static async Task TestInitialize(TestContext context)
     {
         try
         {
@@ -43,16 +43,26 @@ public class CRMTests
             _playwright = await Playwright.CreateAsync();
 
             // Konfigurera webbläsarstart
+            var isCI = Environment.GetEnvironmentVariable("GITHUB_ACTIONS") == "true";
             var options = new BrowserTypeLaunchOptions
             {
-                Headless = true,  // Kör i headless-läge för CI/CD
-                Timeout = Timeout // Sätt timeout för långa operationer
+                Headless = isCI,     // Kör headless i CI/CD, synlig lokalt
+                SlowMo = isCI ? 0 : 1500,  // Ingen fördröjning i CI/CD, 1.5 sekunder lokalt
+                Timeout = Timeout    // Sätt timeout för långa operationer
             };
 
             // Starta webbläsare och skapa ny sida
             _browser = await _playwright.Chromium.LaunchAsync(options);
             _page = await _browser.NewPageAsync();
             await _page.SetViewportSizeAsync(1920, 1080); // Sätt viewport-storlek
+
+            // Lägg till console logging
+            if (_page != null)
+            {
+                _page.Console += (_, msg) => Console.WriteLine($"Browser console: {msg.Text}");
+            }
+
+            Console.WriteLine($"Browser initialized in {(isCI ? "headless" : "visible")} mode.");
         }
         catch (Exception ex)
         {
@@ -194,6 +204,7 @@ public class CRMTests
     [TestMethod]
     public async Task AdminLoginTest()
     {
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
         await LoginAsAdmin();
         await Logout();
     }
@@ -209,6 +220,7 @@ public class CRMTests
     [TestMethod]
     public async Task IssueManagementTest()
     {
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
         await LoginAsAdmin();
 
         // Navigera till ärendesidan
@@ -272,6 +284,7 @@ public class CRMTests
     [TestMethod]
     public async Task FormSubjectsTest()
     {
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
         await LoginAsAdmin();
 
         // Navigera till formulärämnen
@@ -340,6 +353,7 @@ public class CRMTests
     [TestMethod]
     public async Task GuestIssueTest()
     {
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
         // Navigera till Demo AB issueform
         Console.WriteLine("Navigating to Demo AB issueform...");
         await _page.GotoAsync("http://localhost:3000/Demo%20AB/issueform", new PageGotoOptions
@@ -394,6 +408,7 @@ public class CRMTests
     [TestMethod]
     public async Task RegistrationTest()
     {
+        if (_page == null) throw new InvalidOperationException("Page is not initialized");
         // Navigera till registreringssidan
         Console.WriteLine("Clicking on Register...");
         await _page.GotoAsync("http://localhost:3000/register", new PageGotoOptions
